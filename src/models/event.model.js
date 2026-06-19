@@ -1,7 +1,7 @@
 import {Schema, model} from "mongoose";
 
 
-const eventShema = new Schema({
+const eventSchema = new Schema({
     name:String,
     date:Date,
     place:String,
@@ -10,4 +10,4 @@ const eventShema = new Schema({
     status:Boolean
 });
 
-export const eventModel = model("event", eventShema);
+export const eventModel = model("event", eventSchema);

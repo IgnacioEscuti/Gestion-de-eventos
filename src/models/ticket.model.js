@@ -1,4 +1,4 @@
-import { Schema, Model, Types } from "mongoose";
+import { Schema, model, Types } from "mongoose";
 
 
 const ticketSchema = new Schema({

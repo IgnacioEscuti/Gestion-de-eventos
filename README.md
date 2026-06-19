@@ -18,7 +18,7 @@ Plataforma de gestión y venta de entradas para eventos (conciertos, charlas, co
 
 ```bash
 git clone <url-del-repositorio>
-cd backend-ii
+cd Gestion-de-eventos
 npm install
 ```
 
@@ -76,6 +76,7 @@ src/
 |---|---|---|
 | GET | /api/health | Indica que el servidor está activo |
 | GET | /api/events | Devuelve la lista de eventos |
-| GET | /api/sessions | Estructura inicial de login/logout (sin lógica de autenticación implementada) |
+| POST | /api/sessions | Login (estructura inicial, sin lógica de autenticación implementada) |
+| DELETE | /api/sessions | Logout (estructura inicial, sin lógica de autenticación implementada) |
 | GET | /api/users | Devuelve la lista de usuarios |
 | GET | /api/tickets | Devuelve la lista de tickets |

@@ -7,7 +7,9 @@ import sessionRouter from "./routes/session.routes.js"
 
 const app = express();
 
+//middlewares
 app.use(express.json());
+app.use(express.urlencoded({extended: true}));
 
 app.get("/api/health", (req, res) =>{
     res.json({status:"ok"});

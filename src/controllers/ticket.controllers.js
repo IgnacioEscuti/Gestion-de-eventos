@@ -1,5 +1,5 @@
 
 
-export async function getAllTickets(req,res,next){
+export async function getAllTickets(req, res, next) {
 
 }

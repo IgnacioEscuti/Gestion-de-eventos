@@ -7,7 +7,7 @@ export async function register(req, res) {
         const newUser = await userService.register(req.body);
         res.status(201).json({ newUser });
     } catch (error) {
-        res.status(409).json({ error: error.message });
+        res.status(error.statusCode || 500).json({ error: error.message });
     }
 }
 

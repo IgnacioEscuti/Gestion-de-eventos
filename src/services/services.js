@@ -13,11 +13,13 @@ export class UserService {
 
         const existingUser = await this.repository.findByEmail(email);
         if (existingUser) {
-            throw new Error("el usuario ya existe");
+            const error = new Error("el usuario ya existe");
+            error.statusCode = 409;
+            throw error;
         }
 
         const hashedPassword = await createHash(password);
-        
+
         const newUser = await this.repository.create({
             ...data,
             password: hashedPassword,
@@ -28,10 +30,10 @@ export class UserService {
             first_name: newUser.first_name,
             last_name: newUser.last_name,
             email: newUser.email,
-            role: newUser.role,
+            role: newUser.role
         }
         return sessionData;
-        
+
     }
 
 

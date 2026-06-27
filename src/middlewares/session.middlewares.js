@@ -20,7 +20,7 @@ export async function validatePassword(req, res, next) {
     if (password.length < 5) {
         return res.status(400).json({ error: "la contraseña debe tener minimo 5 caracteres" });
     }
-    if (!/^[A-Z]/.test(password)) {
+    if (!/[A-Z]/.test(password)) {
         return res.status(400).json({ error: "la contraseña debe tener al menos una mayúscula" });
     }
     next();

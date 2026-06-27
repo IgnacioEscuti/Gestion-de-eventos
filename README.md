@@ -18,7 +18,7 @@ Plataforma de gestión y venta de entradas para eventos (conciertos, charlas, co
 ## Instalación
 
 ```bash
-git clone <url-del-repositorio>
+git clone https://github.com/IgnacioEscuti/Gestion-de-eventos.git
 cd Gestion-de-eventos
 npm install
 ```

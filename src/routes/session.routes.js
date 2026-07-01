@@ -1,10 +1,13 @@
 import { Router } from "express";
-import { login, register } from "../controllers/session.controllers.js";
-import { userExists, validateEmail, validatePassword, validateUser } from "../middlewares/session.middlewares.js";
+import { getCurrentUser, login, register, logout } from "../controllers/session.controllers.js";
+import { validateEmail, validateLoginFields, validatePassword, validateUser } from "../middlewares/session.middlewares.js";
+import { authMiddleware } from "../middlewares/auth.middleware.js";
 
 const router = Router();
 
 router.post("/register", validateUser, validateEmail, validatePassword, register);
-router.post("/login", userExists, login);
+router.post("/login", validateLoginFields, login);
+router.get("/current", authMiddleware, getCurrentUser);
+router.post("/logout", logout);
 
 export default router;

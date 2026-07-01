@@ -1,5 +1,6 @@
-import { userRepository } from "../repositories/repositories.js";
-import { createHash, isValidPassword } from "../utils/utils.js";
+import { userRepository } from "../repositories/user.repository.js";
+import { createHash, isValidPassword } from "../utils/hash.js";
+import { generateToken } from "../utils/jwt.js"
 
 
 
@@ -42,15 +43,26 @@ export class UserService {
 
         const findByEmail = await this.repository.findByEmail(email);
         if (!findByEmail) {
-            throw new Error("el usuario no existe")
+            throw new Error("Credenciales inválidas")
         }
+
         const validatePassword = await isValidPassword(password, findByEmail.password);
         if (!validatePassword) {
-            throw new Error("la contraseña es incorrecta")
+            throw new Error("Credenciales inválidas")
         }
-        const sessionData = {
+
+        const tokenUser = {
+            id: findByEmail.id,
             email: findByEmail.email,
             role: findByEmail.role
+        }
+
+        const token = generateToken(tokenUser)
+
+        const sessionData = {
+            email: findByEmail.email,
+            role: findByEmail.role,
+            token: token
         }
         return sessionData;
     }

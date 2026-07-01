@@ -1,14 +1,11 @@
-import { userModel } from "../models/user.model.js";
 
-export async function userExists(req, res, next) {
-    const { email } = req.body;
-    const user = await userModel.findOne({ email });
-    if (user == null) {
-        res.status(401).json({ error: "el usuario es incorrecto" })
-    } else {
-        req.user = user;
-        next();
+
+export async function validateLoginFields(req, res, next) {
+    const { email, password } = req.body;
+    if (!email || !password) {
+        return res.status(400).json({ error: "Faltan credenciales" })
     }
+    next();
 }
 
 
@@ -42,5 +39,4 @@ export async function validateEmail(req, res, next) {
         return res.status(400).json({ error: "El email debe cumplir con el formato" });
     }
     next();
-
 }

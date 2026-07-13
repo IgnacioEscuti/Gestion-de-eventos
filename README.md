@@ -11,6 +11,7 @@ Plataforma de gestión y venta de entradas para eventos (conciertos, charlas, co
 - Node.js
 - Express 5
 - MongoDB + Mongoose
+- Passport.js (estrategias de autenticación: `passport-local`, `passport-jwt`)
 - bcrypt (hash de contraseñas)
 - jsonwebtoken (autenticación con JWT)
 - cookie-parser (lectura de cookies)
@@ -73,6 +74,18 @@ src/
   app.js         # Configuración de la aplicación Express
   server.js      # Punto de entrada, levanta el servidor
 ```
+
+## Autenticación con Passport.js
+
+La autenticación está centralizada en estrategias de [Passport.js](https://www.passportjs.org/), definidas en `src/config/passport.config.js` (Passport se inicializa en `app.js`, pero ninguna estrategia vive ahí). Esto deja el archivo preparado para agregar nuevas estrategias (por ejemplo Google o GitHub OAuth) sin tocar `app.js` ni las rutas existentes: solo hay que sumar el `passport.use("nombre", new Strategy(...))` correspondiente.
+
+| Estrategia | Tipo | Qué hace |
+|---|---|---|
+| `register` | `passport-local` | Verifica que el email no esté registrado, hashea la contraseña con bcrypt y crea el usuario con `role: "user"` |
+| `login` | `passport-local` | Busca el usuario por email y valida la contraseña con bcrypt |
+| `current` | `passport-jwt` | Extrae el JWT de la cookie `currentUser` (extractor custom, no de un header) y valida su firma |
+
+El JWT en sí (generación de token y seteo de la cookie `httpOnly`) lo maneja el controller después de una autenticación exitosa, no la estrategia — así la estrategia solo se ocupa de validar credenciales.
 
 ## Rutas disponibles
 
@@ -180,7 +193,7 @@ El JWT se guarda automáticamente en una cookie `currentUser` con `HttpOnly: tru
 
 ## Ruta protegida — GET /api/sessions/current
 
-Requiere estar autenticado. El middleware lee la cookie `currentUser`, verifica el JWT y expone el payload en la respuesta.
+Requiere estar autenticado. La estrategia `current` de Passport lee la cookie `currentUser`, verifica el JWT y deja el payload disponible en `req.user`, que el controller devuelve en la respuesta.
 
 ### Ejemplo de request
 
@@ -193,11 +206,9 @@ curl http://localhost:3000/api/sessions/current \
 
 ```json
 {
-  "user": {
-    "id": "6a456a217f4b329b77485800",
-    "email": "ana@example.com",
-    "role": "user"
-  }
+  "id": "6a456a217f4b329b77485800",
+  "email": "ana@example.com",
+  "role": "user"
 }
 ```
 
@@ -206,7 +217,7 @@ curl http://localhost:3000/api/sessions/current \
 | Código | Causa | Ejemplo de respuesta |
 |---|---|---|
 | 401 | No hay cookie de sesión | `{"error": "no autenticado"}` |
-| 401 | Token inválido o expirado | `{"error": "token inválido o expirado"}` |
+| 401 | Token inválido, manipulado o expirado | `{"error": "no autenticado"}` |
 
 ## Logout — POST /api/sessions/logout
 

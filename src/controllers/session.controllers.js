@@ -1,24 +1,21 @@
-import { RegisterDTO } from "../DTOs/user.dto.js";
-import { userService } from "../services/user.service.js";
+import { sessionService } from "../services/session.service.js";
 import { env } from "../config/env.js"
 
 
 
 export async function register(req, res) {
     try {
-        const dto = new RegisterDTO(req.body);
-        const newUser = await userService.register(dto);
-        res.status(201).json({ newUser });
+        const { first_name, last_name, email, role } = req.user;
+        res.status(201).json({ newUser: { first_name, last_name, email, role } });
+    } catch (error) {
+        res.status(400).json({ error: error.message });
     }
-    catch (error) {
-        res.status(error.statusCode || 500).json({ error: error.message });
-    }
-};
+}
 
 
 export async function login(req, res, next) {
     try {
-        const { email, role, token } = await userService.login(req.body)
+        const { email, role, token } = await sessionService.generateSessionToken(req.user);
 
         res.cookie("currentUser", token, {
             httpOnly: true,
@@ -33,14 +30,17 @@ export async function login(req, res, next) {
     }
 };
 
+
 export async function getCurrentUser(req, res, next) {
     try {
-        res.status(200).json({ user: req.user })
+        const { id, email, role } = req.user;
+        res.status(200).json({ id, email, role })
     }
     catch (error) {
         res.status(401).json({ error: error.message })
     }
 }
+
 
 export async function logout(req, res, next) {
     try {

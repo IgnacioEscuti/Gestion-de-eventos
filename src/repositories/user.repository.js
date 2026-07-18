@@ -15,6 +15,10 @@ export class UserRepository {
     async findByEmail(email) {
         return this.dao.findByEmail(email)
     }
+
+    async find(filters) {
+        return this.dao.find(filters)
+    }
 }
 
 export const userRepository = new UserRepository(userDAO);

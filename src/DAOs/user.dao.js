@@ -10,4 +10,8 @@ export class UserDAO {
         return userModel.findOne({ email: email.trim().toLowerCase() })
     }
 
+    async find(filters) {
+        return userModel.find(filters)
+    }
+
 }

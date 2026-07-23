@@ -138,9 +138,11 @@ Para el caso de "modificar solo eventos propios", el rol ya no alcanza para deci
 | Método | Ruta | Descripción | Acceso |
 |---|---|---|---|
 | GET | /api/health | Indica que el servidor está activo | Público |
-| GET | /api/events | Devuelve los eventos publicados | Autenticado (`user`, `organizer`, `admin`) |
+| GET | /api/events | Lista de eventos, con filtros, paginación y ordenamiento | Público |
+| GET | /api/events/:id | Devuelve un evento por id | Público |
 | POST | /api/events | Crea un evento | `organizer`, `admin` |
-| PUT | /api/events/:id | Modifica un evento (propio, o cualquiera si es `admin`) | `organizer` dueño del evento, `admin` |
+| PUT | /api/events/:id | Modifica los datos de un evento (propio, o cualquiera si es `admin`) | `organizer` dueño del evento, `admin` |
+| PATCH | /api/events/:id/status | Cambia el estado de un evento (propio, o cualquiera si es `admin`) | `organizer` dueño del evento, `admin` |
 | POST | /api/sessions/register | Registra un nuevo usuario (ver detalle abajo) | Público |
 | POST | /api/sessions/login | Login: valida credenciales y guarda el JWT en una cookie | Público |
 | GET | /api/sessions/current | Devuelve los datos del usuario autenticado (requiere cookie) | Autenticado |
@@ -288,9 +290,31 @@ curl -X POST http://localhost:3000/api/sessions/logout \
 
 Después del logout, cualquier request a `/api/sessions/current` devuelve `401`.
 
+## Modelo de datos — Event
+
+| Campo | Tipo | Requerido | Notas |
+|---|---|---|---|
+| title | string | Sí | |
+| description | string | Sí | |
+| category | string | Sí | |
+| date | Date | Sí | Debe ser una fecha futura al crear |
+| location | string | Sí | |
+| capacity | number | Sí | Debe ser mayor a 0 |
+| price | number | Sí | No puede ser negativo |
+| status | string | Sí | Uno de: `draft`, `published`, `cancelled`, `finished` |
+| organizer | ObjectId (ref `user`) | Sí | Se asigna automáticamente desde el usuario autenticado; nunca se toma del body |
+
+Un job de cron (`src/config/cron.config.js`) corre cada hora y pasa a `finished` los eventos `published` cuya fecha ya pasó.
+
 ## Crear evento — POST /api/events
 
-Requiere cookie de sesión válida y rol `organizer` o `admin`. El evento queda asociado como dueño (`organizer`) al usuario autenticado.
+Requiere cookie de sesión válida y rol `organizer` o `admin`. El `organizer` del evento se asigna automáticamente desde `req.user`; si el body incluye un campo `organizer`, se ignora.
+
+### Validaciones de negocio (en `event.service.js`)
+
+- La fecha no puede ser pasada.
+- `capacity` debe ser mayor a 0.
+- `price` no puede ser negativo.
 
 ### Ejemplo de request
 
@@ -310,22 +334,45 @@ curl -X POST http://localhost:3000/api/events \
   }'
 ```
 
-### Respuesta exitosa (201)
+### Respuesta exitosa (200)
 
 ```json
-{ "message": "Evento creado exitosamente" }
+{ "event": { "_id": "...", "title": "Congreso Tech 2026", "status": "draft", "organizer": "...", "...": "..." } }
 ```
 
 ### Errores posibles
 
 | Código | Causa | Ejemplo de respuesta |
 |---|---|---|
+| 400 | Fecha pasada, inválida, `capacity <= 0` o `price < 0` | `{"error": "la fecha del evento debe ser futura"}` |
 | 401 | No hay cookie de sesión, o el token es inválido/expiró | `{"error": "no autenticado"}` |
 | 403 | Usuario autenticado con rol `user` (sin permiso para crear eventos) | `{"status":"error","message":"Usuario no autorizado"}` |
 
+## Consultar evento por id — GET /api/events/:id
+
+Público, no requiere autenticación.
+
+### Errores posibles
+
+| Código | Causa | Ejemplo de respuesta |
+|---|---|---|
+| 400 | El `id` no tiene formato de ObjectId válido | `{"error": "id de evento inválido"}` |
+| 404 | El evento no existe | `{"error": "no existe el evento"}` |
+
 ## Modificar evento — PUT /api/events/:id
 
-Requiere cookie de sesión válida y rol `organizer` o `admin`. Además, si el rol es `organizer`, el evento tiene que ser propio: se compara el `organizer` guardado en el evento contra el `id` del usuario autenticado. Un `admin` puede modificar cualquier evento.
+Requiere cookie de sesión válida y rol `organizer` o `admin`. Si el rol es `organizer`, el evento tiene que ser propio: se compara el `organizer` guardado en el evento contra el `id` del usuario autenticado. Un `admin` puede modificar cualquier evento.
+
+Solo se pueden actualizar `title`, `description`, `category`, `location`, `date`, `capacity` y `price`. Si el body incluye `organizer` o `status`, se ignoran — el dueño del evento no se puede reasignar por este endpoint, y el cambio de estado tiene su propia ruta (`PATCH /api/events/:id/status`).
+
+### Reglas de negocio
+
+- No se puede modificar un evento con `status: "cancelled"`.
+- No se puede modificar un evento cuya fecha ya pasó.
+- Si se manda `date`, tiene que ser una fecha futura.
+- `capacity` (si se manda) debe ser mayor a 0; `price` (si se manda) no puede ser negativo.
+
+> **Decisión de diseño:** la consigna menciona que los eventos cancelados "no pueden modificarse (salvo justificación documentada)". No se implementó ninguna excepción para ese caso: no hay ningún caso de prueba que la ejercite ni una especificación de cómo debería funcionar (¿un campo de motivo? ¿solo lo puede hacer un admin?), así que se optó por el bloqueo total, que sí está cubierto por los casos de prueba.
 
 ### Ejemplo de request
 
@@ -333,33 +380,95 @@ Requiere cookie de sesión válida y rol `organizer` o `admin`. Además, si el r
 curl -X PUT http://localhost:3000/api/events/<id> \
   -H "Content-Type: application/json" \
   -b cookies.txt \
-  -d '{ "status": "published" }'
+  -d '{ "capacity": 80, "price": 120 }'
 ```
 
 ### Respuesta exitosa (200)
 
 ```json
-{ "event": { "_id": "...", "title": "Congreso Tech 2026", "status": "published", "organizer": "...", "...": "..." } }
+{ "event": { "_id": "...", "title": "Congreso Tech 2026", "capacity": 80, "price": 120, "organizer": "...", "...": "..." } }
 ```
 
 ### Errores posibles
 
 | Código | Causa | Ejemplo de respuesta |
 |---|---|---|
+| 400 | Evento cancelado, fecha ya pasada, `capacity <= 0`, `price < 0` o fecha nueva inválida/pasada | `{"error": "no se puede modificar un evento cancelado"}` |
 | 401 | No hay cookie de sesión, o el token es inválido/expiró | `{"error": "no autenticado"}` |
 | 403 | Rol `user` (sin permiso para modificar eventos) | `{"status":"error","message":"Usuario no autorizado"}` |
 | 403 | Rol `organizer` que no es dueño del evento | `{"error": "no tenes permiso para modificar el evento"}` |
 | 404 | El evento no existe | `{"error": "no existe el evento"}` |
 
-## Listar eventos — GET /api/events
+## Cambiar estado del evento — PATCH /api/events/:id/status
 
-Requiere estar autenticado (cualquier rol: `user`, `organizer` o `admin`). Devuelve únicamente los eventos con `status: "published"`.
+Requiere cookie de sesión válida y rol `organizer` o `admin`. Mismas reglas de propiedad que `PUT /api/events/:id`. El body solo admite `status`.
+
+### Reglas de negocio
+
+- `status` tiene que ser uno de `draft`, `published`, `cancelled`, `finished`.
+- No se puede cambiar el estado de un evento ya `cancelled` (cancelar es definitivo).
+- No se puede pasar a `published` un evento `finished`, `cancelled`, o cuya fecha ya pasó.
+- Cancelar un evento (`status: "cancelled"`) es la única forma de "eliminarlo": nunca se borra físicamente de la base de datos.
+
+### Ejemplo de request
+
+```bash
+curl -X PATCH http://localhost:3000/api/events/<id>/status \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{ "status": "cancelled" }'
+```
+
+### Respuesta exitosa (200)
+
+```json
+{ "event": { "_id": "...", "status": "cancelled", "organizer": "...", "...": "..." } }
+```
 
 ### Errores posibles
 
 | Código | Causa | Ejemplo de respuesta |
 |---|---|---|
+| 400 | `status` inválido, evento ya cancelado, o se intenta publicar un evento finalizado/cancelado/vencido | `{"error": "no se puede publicar un evento finalizado o cancelado"}` |
 | 401 | No hay cookie de sesión, o el token es inválido/expiró | `{"error": "no autenticado"}` |
+| 403 | Rol `user`, o `organizer` que no es dueño del evento | `{"error": "no tenes permiso para modificar el evento"}` |
+| 404 | El evento no existe | `{"error": "no existe el evento"}` |
+
+## Listar eventos — GET /api/events
+
+Público, no requiere autenticación. Si no se especifica `status` en el filtro, devuelve por defecto solo los eventos `published`.
+
+### Filtros disponibles (query params)
+
+| Parámetro | Descripción |
+|---|---|
+| status | Filtra por estado exacto (`draft`, `published`, `cancelled`, `finished`) |
+| category | Filtra por categoría exacta |
+| location | Filtra por ubicación exacta |
+| dateFrom / dateTo | Rango de fechas (`date >= dateFrom` y/o `date <= dateTo`) |
+| priceMin / priceMax | Rango de precio |
+| search | Búsqueda parcial (case-insensitive) en `title`, `description`, `category` y `location` |
+| sort | Campo de ordenamiento para Mongoose (ej. `date`, `-date` para descendente) |
+| page | Número de página (default: 1) |
+| limit | Resultados por página (default: 10) |
+
+### Ejemplo de request
+
+```bash
+curl "http://localhost:3000/api/events?status=published&category=tech&page=1&limit=5&sort=date"
+```
+
+### Respuesta exitosa (200)
+
+```json
+{
+  "data": [ { "_id": "...", "title": "Congreso Tech 2026", "status": "published", "...": "..." } ],
+  "page": 1,
+  "limit": 5,
+  "total": 12,
+  "totalPages": 3
+}
+```
 
 ## Listar usuarios — GET /api/users
 

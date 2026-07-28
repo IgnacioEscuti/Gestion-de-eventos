@@ -9,8 +9,8 @@ const router = Router();
 router.post("/", authenticateCurrent, createTicket);
 router.get("/:id", authenticateCurrent, getTicket);
 router.get("/", authenticateCurrent, getUserTickets);
-router.get("/", authenticateCurrent, authorizeRoles(["admin", "organizer"]), getAllTickets);
-router.patch("/:id", authenticateCurrent, authorizeRoles(["admin", "organizer"]), cancelTicket);
+router.get("/all", authenticateCurrent, authorizeRoles(["admin", "organizer"]), getAllTickets);
+router.patch("/:id", authenticateCurrent, cancelTicket);
 
 
 

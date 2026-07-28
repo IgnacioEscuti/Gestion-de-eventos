@@ -23,8 +23,8 @@ export class TicketRepository {
         return this.dao.findById(id);
     }
 
-    async findByIdAndUpdate(id) {
-        return this.dao.findByIdAndUpdate(id);
+    async findByIdAndUpdate(id, data) {
+        return this.dao.findByIdAndUpdate(id, data, { new: true });
     }
 }
 

@@ -1,24 +1,24 @@
 import { ticketModel } from "../models/ticket.model.js";
 
 
-export class TicketDAO{
+export class TicketDAO {
     async create(data) {
         return ticketModel.create(data);
     }
 
-    async findOne(data){
+    async findOne(data) {
         return ticketModel.findOne(data);
     }
 
-    async find(data){
+    async find(data) {
         return ticketModel.find(data);
     }
 
-    async findById(id){
+    async findById(id) {
         return ticketModel.findById(id);
     }
 
-    async findByIdAndUpdate(id){
-        return ticketModel.findByIdAndUpdate(id);
+    async findByIdAndUpdate(id, data) {
+        return ticketModel.findByIdAndUpdate(id, data, { new: true });
     }
 }

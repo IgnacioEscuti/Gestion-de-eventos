@@ -1,7 +1,8 @@
 import { ticketRepository, TicketRepository } from "../repositories/ticket.repository.js";
 import { eventService } from "../services/event.service.js"
-import { validExistTicket, validStatusTicket, generateTicketCode } from "../utils/ticket.utils.js";
+import { validExistTicket, validStatusTicket, generateTicketCode, validTicket, validTicketCancellable, validTicketOwnership } from "../utils/ticket.utils.js";
 import { handleMongooseError } from "../utils/mongooseError.utils.js";
+import { validOwnership } from "../utils/event.utils.js";
 
 export class TicketService {
     constructor(ticketRepository, eventService) {
@@ -70,7 +71,7 @@ export class TicketService {
         }
     }
 
-    async getAlltickets(tickets) {
+    async getAllTickets(tickets) {
         try {
             return await this.ticketRepository.find(tickets);
         }
@@ -79,14 +80,23 @@ export class TicketService {
         }
     }
 
-    async cancelTicket(id) {
+    async cancelTicket(ticketId, userId, userRole) {
         let ticket;
         try {
-            ticket = await this.ticketRepository.findByIdAndUpdate(id);
+            ticket = await this.ticketRepository.findById(ticketId);
         } catch (error) {
             handleMongooseError(error);
         }
-        return ticket;
+
+        validTicket(ticket);
+        validTicketOwnership(ticket, userId, userRole);
+        validTicketCancellable(ticket);
+
+        try {
+            return await this.ticketRepository.findByIdAndUpdate(ticketId, { status: "cancelled" });
+        } catch (error) {
+            handleMongooseError(error);
+        }
     }
 }
 

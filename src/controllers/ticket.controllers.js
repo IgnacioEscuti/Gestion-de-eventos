@@ -44,7 +44,7 @@ export async function getAllTickets(req, res, next) {
 
 export async function cancelTicket(req, res, next) {
     try {
-        const ticket = await ticketService.cancelTicket(req.params.id, req.user.id, req.user.role);
+        const ticket = await ticketService.cancelTicket( req.params.id, req.user.id, req.user.role);
         res.status(200).json({ ticket })
     }
     catch (error) {

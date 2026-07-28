@@ -1,55 +1,17 @@
 import { eventRepository } from "../repositories/event.repository.js";
-
-
-function handleMongooseError(error) {
-    if (error.statusCode) throw error;
-
-    if (error.name === "CastError") {
-        const err = new Error("id de evento inválido");
-        err.statusCode = 400;
-        throw err;
-    }
-    if (error.name === "ValidationError") {
-        const err = new Error(error.message);
-        err.statusCode = 400;
-        throw err;
-    }
-    throw error;
-}
-
+import { validDate, validCapacity, validPrice, validEvent, validOwnership, validEventEditable } from "../utils/event.utils.js";
+import { handleMongooseError } from "../utils/mongooseError.utils.js";
 
 export class EventService {
     constructor(repository) {
         this.repository = repository
     }
 
+
     async createEvent(data, organizerId) {
-        const eventDate = new Date(data.date);
-
-        if (isNaN(eventDate.getTime())) {
-            const error = new Error("la fecha del evento no es válida");
-            error.statusCode = 400;
-            throw error;
-        }
-
-        const now = new Date();
-        if (eventDate <= now) {
-            const error = new Error("la fecha del evento debe ser futura");
-            error.statusCode = 400;
-            throw error;
-        }
-
-        if (data.capacity <= 0) {
-            const error = new Error("la capacidad debe ser mayor a 0");
-            error.statusCode = 400;
-            throw error;
-        }
-
-        if (data.price < 0) {
-            const error = new Error("el precio no debe ser negativo");
-            error.statusCode = 400;
-            throw error;
-        }
+        validDate(data.date);
+        validCapacity(data.capacity);
+        validPrice(data.price);
 
         try {
             return await this.repository.create({
@@ -68,11 +30,7 @@ export class EventService {
         } catch (error) {
             handleMongooseError(error);
         }
-        if (!getEvent) {
-            const error = new Error("no existe el evento")
-            error.statusCode = 404;
-            throw error;
-        }
+        validEvent(getEvent);
         return getEvent;
     }
 
@@ -125,61 +83,15 @@ export class EventService {
         } catch (error) {
             handleMongooseError(error);
         }
-        if (!getEvent) {
-            const error = new Error("no existe el evento")
-            error.statusCode = 404;
-            throw error;
-        }
 
-        const isOwner = getEvent.organizer.toString() === userId;
-        const isAdmin = userRole === "admin"
-        if (!isOwner && !isAdmin) {
-            const error = new Error("no tenes permiso para modificar el evento")
-            error.statusCode = 403;
-            throw error;
-        }
+        validEvent(getEvent);
+        validOwnership(getEvent, userId, userRole);
+        validEventEditable(getEvent);
+        if (data.capacity !== undefined) validCapacity(data.capacity);
+        if (data.price !== undefined) validPrice(data.price);
+        if (data.date !== undefined) validDate(data.date);
 
-        if (getEvent.status === "cancelled") {
-            const error = new Error("no se puede modificar un evento cancelado");
-            error.statusCode = 400;
-            throw error;
-        }
-
-        const now = new Date();
-        if (getEvent.date <= now) {
-            const error = new Error("no se puede modificar un evento que ya finalizó");
-            error.statusCode = 400;
-            throw error;
-        }
-
-        if (data.capacity !== undefined && data.capacity <= 0) {
-            const error = new Error("la capacidad debe ser mayor a 0");
-            error.statusCode = 400;
-            throw error;
-        }
-
-        if (data.price !== undefined && data.price < 0) {
-            const error = new Error("el precio no puede ser negativo");
-            error.statusCode = 400;
-            throw error;
-        }
-
-        let eventDate;
-        if (data.date) {
-            eventDate = new Date(data.date);
-            if (isNaN(eventDate.getTime())) {
-                const error = new Error("la fecha del evento no es válida");
-                error.statusCode = 400;
-                throw error;
-            }
-            if (eventDate <= now) {
-                const error = new Error("la nueva fecha del evento debe ser futura");
-                error.statusCode = 400;
-                throw error;
-            }
-        }
-
-        const { title, description, category, location, capacity, price } = data;
+        const { title, description, category, location, capacity, price, date } = data;
         const updateData = {};
         if (title !== undefined) updateData.title = title;
         if (description !== undefined) updateData.description = description;
@@ -187,7 +99,7 @@ export class EventService {
         if (location !== undefined) updateData.location = location;
         if (capacity !== undefined) updateData.capacity = capacity;
         if (price !== undefined) updateData.price = price;
-        if (eventDate) updateData.date = eventDate;
+        if (date !== undefined) updateData.date = new Date(date);
 
         try {
             return await this.repository.findByIdAndUpdate(eventId, updateData);
@@ -196,54 +108,6 @@ export class EventService {
         }
     }
 
-    async changeStatus(eventId, userId, userRole, status) {
-        const validStatuses = ["draft", "published", "cancelled", "finished"];
-        if (!validStatuses.includes(status)) {
-            const error = new Error("estado inválido");
-            error.statusCode = 400;
-            throw error;
-        }
-
-        let getEvent;
-        try {
-            getEvent = await this.repository.findById(eventId);
-        } catch (error) {
-            handleMongooseError(error);
-        }
-        if (!getEvent) {
-            const error = new Error("no existe el evento")
-            error.statusCode = 404;
-            throw error;
-        }
-
-        const isOwner = getEvent.organizer.toString() === userId;
-        const isAdmin = userRole === "admin";
-        if (!isOwner && !isAdmin) {
-            const error = new Error("no tenes permiso para modificar el evento")
-            error.statusCode = 403;
-            throw error;
-        }
-
-        if (getEvent.status === "cancelled") {
-            const error = new Error("no se puede modificar un evento cancelado");
-            error.statusCode = 400;
-            throw error;
-        }
-
-        const now = new Date();
-        const yaFinalizadoOCancelado = getEvent.status === "finished" || getEvent.date <= now;
-        if (status === "published" && yaFinalizadoOCancelado) {
-            const error = new Error("no se puede publicar un evento finalizado o cancelado");
-            error.statusCode = 400;
-            throw error;
-        }
-
-        try {
-            return await this.repository.findByIdAndUpdate(eventId, { status });
-        } catch (error) {
-            handleMongooseError(error);
-        }
-    }
 
     async finishExpiredEvents() {
         const filters = {

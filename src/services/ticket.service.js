@@ -1,43 +1,94 @@
-import { TicketRepository } from "../repositories/ticket.repository.js";
-
-function handleMongooseError(error) {
-    if (error.statusCode) throw error;
-
-    if (error.name === "CastError") {
-        const err = new Error("id de evento inválido");
-        err.statusCode = 400;
-        throw err;
-    }
-    if (error.name === "ValidationError") {
-        const err = new Error(error.message);
-        err.statusCode = 400;
-        throw err;
-    }
-    throw error;
-}
+import { ticketRepository, TicketRepository } from "../repositories/ticket.repository.js";
+import { eventService } from "../services/event.service.js"
+import { validExistTicket, validStatusTicket, generateTicketCode } from "../utils/ticket.utils.js";
+import { handleMongooseError } from "../utils/mongooseError.utils.js";
 
 export class TicketService {
-    constructor(repository) {
-        return this.repository = repository
+    constructor(ticketRepository, eventService) {
+        this.ticketRepository = ticketRepository;
+        this.eventService = eventService;
     }
 
 
-    async getTicket() {
-        const existingTicket = await this.repository.findOne({
+    async generateUniqueCode() {
+        let code;
+        let exists = true;
+
+        while (exists) {
+            code = generateTicketCode();
+            exists = await this.ticketRepository.findOne({ code });
+        }
+
+        return code;
+    }
+
+
+    async createTicket(userId, eventId) {
+        const event = await this.eventService.getEventById(eventId);
+        validStatusTicket(event.status);
+
+        const existingTicket = await this.ticketRepository.findOne({
             user: userId,
             event: eventId,
-            status: 'active'
-        })
-        if (existingTicket){
-            const error = new Error("Ya existe este ticket");
-            error.statusCode = 400;
-            throw error;
-        }
-            
+            status: "active"
+        });
+        validExistTicket(existingTicket);
 
+        let newTicket;
+        const code = await this.generateUniqueCode();
+        try {
+            newTicket = await this.ticketRepository.create({
+                user: userId,
+                event: eventId,
+                code
+            });
+        }
+        catch (error) {
+            handleMongooseError(error);
+        }
+        return newTicket;
     }
 
-    async createTicket() {
 
+    async getTicketById(id) {
+        let ticket;
+        try {
+            ticket = await this.ticketRepository.findById(id);
+        } catch (error) {
+            handleMongooseError(error);
+        }
+        validTicket(ticket);
+        return ticket;
+    }
+
+    async getUserTickets(userId) {
+        try {
+            return await this.ticketRepository.find({ user: userId });
+        }
+        catch (error) {
+            handleMongooseError(error);
+        }
+    }
+
+    async getAlltickets(tickets) {
+        try {
+            return await this.ticketRepository.find(tickets);
+        }
+        catch (error) {
+            handleMongooseError(error);
+        }
+    }
+
+    async cancelTicket(id) {
+        let ticket;
+        try {
+            ticket = await this.ticketRepository.findByIdAndUpdate(id);
+        } catch (error) {
+            handleMongooseError(error);
+        }
+        return ticket;
     }
 }
+
+
+export const ticketService = new TicketService(ticketRepository, eventService);

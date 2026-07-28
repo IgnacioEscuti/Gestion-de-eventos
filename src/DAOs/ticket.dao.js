@@ -13,4 +13,12 @@ export class TicketDAO{
     async find(data){
         return ticketModel.find(data);
     }
+
+    async findById(id){
+        return ticketModel.findById(id);
+    }
+
+    async findByIdAndUpdate(id){
+        return ticketModel.findByIdAndUpdate(id);
+    }
 }

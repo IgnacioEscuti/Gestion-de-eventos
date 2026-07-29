@@ -15,6 +15,8 @@ Plataforma de gestión y venta de entradas para eventos (conciertos, charlas, co
 - bcrypt (hash de contraseñas)
 - jsonwebtoken (autenticación con JWT)
 - cookie-parser (lectura de cookies)
+- Nodemailer (envío de emails de confirmación de inscripción)
+- node-cron (tarea programada que finaliza eventos vencidos)
 - dotenv
 - JavaScript ES Modules (import/export)
 
@@ -43,6 +45,11 @@ Variables necesarias:
 | MONGO_URL | URL de conexión a la base de datos de MongoDB |
 | JWT_SECRET | Clave secreta para la firma de tokens JWT |
 | JWT_EXPIRES_IN | Duración del token JWT (ej. `1h`, `7d`) |
+| MAIL_HOST | Host del servidor SMTP usado por Nodemailer |
+| MAIL_PORT | Puerto del servidor SMTP |
+| MAIL_USER | Usuario/cuenta de la casilla que envía los emails |
+| MAIL_PASS | Contraseña (o app password) de esa cuenta |
+| MAIL_FROM | Dirección que figura como remitente en los emails enviados |
 
 ## Cómo ejecutar
 
@@ -62,9 +69,10 @@ npm start
 
 ```
 src/
-  config/        # Configuración de entorno y conexión a la base de datos
+  config/        # Configuración de entorno, conexión a la base de datos, mail y cron
   controllers/   # Lógica de manejo de las peticiones HTTP
   DAOs/          # Acceso a datos (Data Access Objects)
+  DTOs/          # Objetos que sanitizan/dan forma a los datos de entrada
   middlewares/   # Middlewares de Express
   models/        # Esquemas de Mongoose
   repositories/  # Capa de abstracción entre servicios y DAO
@@ -147,8 +155,13 @@ Para el caso de "modificar solo eventos propios", el rol ya no alcanza para deci
 | POST | /api/sessions/login | Login: valida credenciales y guarda el JWT en una cookie | Público |
 | GET | /api/sessions/current | Devuelve los datos del usuario autenticado (requiere cookie) | Autenticado |
 | POST | /api/sessions/logout | Cierra sesión y elimina la cookie de autenticación | Público |
+| POST | /api/events/:eventId/tickets | Crea un ticket (inscripción) para el evento | Autenticado |
+| GET | /api/tickets/my-tickets | Lista los tickets propios del usuario autenticado | Autenticado |
+| GET | /api/tickets/:id | Devuelve un ticket por id | Dueño del ticket, `organizer` dueño del evento, o `admin` |
+| GET | /api/tickets/all | Lista tickets (filtrable por query) | `admin` (todos), `organizer` (solo de sus propios eventos) |
+| GET | /api/events/:eventId/tickets | Lista los tickets de un evento | `organizer` dueño del evento, `admin` |
+| PATCH | /api/tickets/:id/cancel | Cancela un ticket propio | Dueño del ticket, o `admin` |
 | GET | /api/users | Devuelve la lista de usuarios | `admin` |
-| GET | /api/tickets | Devuelve la lista de tickets | Sin protección (fuera del alcance de esta entrega) |
 
 ## Registro de usuarios — POST /api/sessions/register
 
@@ -469,6 +482,112 @@ curl "http://localhost:3000/api/events?status=published&category=tech&page=1&lim
   "totalPages": 3
 }
 ```
+
+## Modelo de datos — Ticket
+
+| Campo | Tipo | Requerido | Notas |
+|---|---|---|---|
+| user | ObjectId (ref `user`) | Sí | Usuario que se inscribe. Solo la referencia, nunca el objeto completo. |
+| event | ObjectId (ref `event`) | Sí | Evento al que se inscribe. Solo la referencia, nunca el objeto completo. |
+| status | string | No (default `active`) | Uno de: `active`, `cancelled` |
+| quantity | number | No (default `1`) | Debe ser un entero mayor a 0 |
+| reservationCode | string | Autogenerado | Código único de 6 dígitos, generado al crear el ticket |
+| cancelledAt | Date | No (default `null`) | Se completa al cancelar el ticket |
+
+El ticket nunca se borra físicamente: cancelar solo cambia `status` a `cancelled` y completa `cancelledAt`.
+
+## Inscribirse a un evento — POST /api/events/:eventId/tickets
+
+Requiere cookie de sesión válida (cualquier rol). Toda la validación vive en `ticket.service.js`, no en el controller.
+
+### Body esperado
+
+```json
+{ "quantity": 2 }
+```
+
+### Reglas de negocio (en orden)
+
+1. `quantity` debe ser un número entero mayor a 0.
+2. El evento debe existir.
+3. El evento tiene que estar `published` (bloquea implícitamente `draft`, `cancelled` y `finished`).
+4. El usuario no puede tener ya un ticket `active` para ese mismo evento (una inscripción activa por usuario y evento).
+5. Tiene que haber cupo suficiente: `capacity - Σ(quantity de tickets con status "active") >= quantity solicitada`. Los tickets `cancelled` no restan cupo.
+
+Si todas las validaciones pasan, se genera un `reservationCode` único y se envía un email de confirmación (Nodemailer) a la casilla del usuario. Si el envío de mail falla, el error se loguea pero **no** revierte la creación del ticket — la inscripción ya es válida independientemente de si el mail llegó o no.
+
+### Ejemplo de request
+
+```bash
+curl -X POST http://localhost:3000/api/events/<eventId>/tickets \
+  -H "Content-Type: application/json" \
+  -b cookies.txt \
+  -d '{ "quantity": 2 }'
+```
+
+### Respuesta exitosa (201)
+
+```json
+{
+  "ticket": {
+    "_id": "...",
+    "user": "...",
+    "event": { "_id": "...", "title": "Congreso Tech 2026", "date": "...", "location": "CABA" },
+    "status": "active",
+    "quantity": 2,
+    "reservationCode": "483920",
+    "cancelledAt": null
+  }
+}
+```
+
+### Errores posibles
+
+| Código | Causa | Ejemplo de respuesta |
+|---|---|---|
+| 400 | `quantity` inválida (no entero, o <= 0) | `{"error": "la cantidad debe ser un número entero mayor a 0"}` |
+| 400 | El evento no está publicado (`draft`, `cancelled` o `finished`) | `{"error": "El ticket no pertenece a un evento publicado"}` |
+| 400 | Ya existe un ticket activo del usuario para ese evento | `{"error": "ya existe un ticket activo para este evento"}` |
+| 400 | No hay cupo suficiente para la cantidad pedida | `{"error": "no hay cupos disponibles para la cantidad solicitada"}` |
+| 401 | No hay cookie de sesión, o el token es inválido/expiró | `{"error": "no autenticado"}` |
+| 404 | El evento no existe | `{"error": "no existe el evento"}` |
+
+## Cancelar un ticket — PATCH /api/tickets/:id/cancel
+
+Requiere cookie de sesión válida. El ticket tiene que pertenecer al usuario autenticado, o el usuario tiene que ser `admin`.
+
+Al cancelar, el documento no se elimina: cambia `status` a `cancelled` y se completa `cancelledAt`. Como el cálculo de cupos solo cuenta tickets `active`, el cupo queda disponible automáticamente para una nueva inscripción.
+
+### Errores posibles
+
+| Código | Causa | Ejemplo de respuesta |
+|---|---|---|
+| 400 | El ticket no existe | `{"error": "No existe este ticket"}` |
+| 400 | El ticket ya estaba cancelado | `{"error": "este ticket ya fue cancelado"}` |
+| 401 | No hay cookie de sesión, o el token es inválido/expiró | `{"error": "no autenticado"}` |
+| 403 | El ticket es de otro usuario y quien pide no es `admin` | `{"error": "no tenes permiso para cancelar este ticket"}` |
+
+## Mis tickets — GET /api/tickets/my-tickets
+
+Requiere cookie de sesión válida. Devuelve únicamente los tickets del usuario autenticado, con los datos del evento poblados (`title`, `date`, `location`). No expone datos de otros usuarios.
+
+```json
+{
+  "tickets": [
+    {
+      "_id": "...",
+      "event": { "_id": "...", "title": "Congreso Tech 2026", "date": "...", "location": "CABA" },
+      "status": "active",
+      "quantity": 2,
+      "reservationCode": "483920"
+    }
+  ]
+}
+```
+
+## Tickets de un evento — GET /api/events/:eventId/tickets
+
+Pensada para que un organizador vea las inscripciones a sus propios eventos. Requiere rol `organizer` o `admin`; si es `organizer`, el evento tiene que ser propio (mismo chequeo de propiedad que en `PUT /api/events/:id`). Un `organizer` de otro evento recibe 403.
 
 ## Listar usuarios — GET /api/users
 

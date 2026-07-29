@@ -6,6 +6,6 @@ export async function getAllUsers(req,res,next){
         res.status(200).json({users});
     }
     catch (error) {
-        res.status(400).json({ error: error.message });
+        res.status(error.statusCode || 500).json({ error: error.message });
     }
 }

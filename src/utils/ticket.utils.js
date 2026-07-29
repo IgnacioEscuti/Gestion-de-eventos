@@ -8,7 +8,7 @@ export function validTicket(ticket) {
 
 export function validTicketOwnership(ticket, userId, userRole) {
     const isOwner = ticket.user.toString() === userId;
-    const isAdmin = userRole === "admin" || userRole === "organizer";
+    const isAdmin = userRole === "admin";
     if (!isOwner && !isAdmin) {
         const error = new Error("no tenes permiso para cancelar este ticket");
         error.statusCode = 403;
@@ -41,6 +41,22 @@ export function generateTicketCode() {
 export function validTicketCancellable(ticket) {
     if (ticket.status === "cancelled") {
         const error = new Error("este ticket ya fue cancelado");
+        error.statusCode = 400;
+        throw error;
+    }
+}
+
+export function validAvailableCapacity(capacity, occupiedSpots, quantity) {
+    if (capacity - occupiedSpots < quantity) {
+        const error = new Error("no hay cupos disponibles para la cantidad solicitada");
+        error.statusCode = 400;
+        throw error;
+    }
+}
+
+export function validQuantity(quantity) {
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+        const error = new Error("la cantidad debe ser un número entero mayor a 0");
         error.statusCode = 400;
         throw error;
     }

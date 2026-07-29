@@ -11,6 +11,13 @@ export class SessionService {
 
 
     async register(data) {
+        const existingUser = await this.repository.findByEmail(data.email);
+        if (existingUser) {
+            const error = new Error("el usuario ya existe");
+            error.statusCode = 409;
+            throw error;
+        }
+
         const hashedPassword = await createHash(data.password);
 
         const newUser = await this.repository.create({

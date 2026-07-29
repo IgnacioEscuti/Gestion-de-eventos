@@ -4,12 +4,8 @@ import { env } from "../config/env.js"
 
 
 export async function register(req, res) {
-    try {
-        const { first_name, last_name, email, role } = req.user;
-        res.status(201).json({ newUser: { first_name, last_name, email, role } });
-    } catch (error) {
-        res.status(400).json({ error: error.message });
-    }
+    const { first_name, last_name, email, role } = req.user;
+    res.status(201).json({ newUser: { first_name, last_name, email, role } });
 }
 
 
@@ -26,28 +22,18 @@ export async function login(req, res, next) {
         res.status(200).json({ email, role });
     }
     catch (error) {
-        res.status(401).json({ error: error.message })
+        res.status(error.statusCode || 500).json({ error: error.message })
     }
 };
 
 
 export async function getCurrentUser(req, res, next) {
-    try {
-        const { id, email, role } = req.user;
-        res.status(200).json({ id, email, role })
-    }
-    catch (error) {
-        res.status(401).json({ error: error.message })
-    }
+    const { id, email, role } = req.user;
+    res.status(200).json({ id, email, role })
 }
 
 
 export async function logout(req, res, next) {
-    try {
-        res.clearCookie("currentUser")
-        res.status(200).json({ mensaje: "sesion cerrada" })
-    }
-    catch (error) {
-        res.status(401).json({ error: error.message })
-    }
+    res.clearCookie("currentUser")
+    res.status(200).json({ mensaje: "sesion cerrada" })
 }

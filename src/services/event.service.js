@@ -109,6 +109,10 @@ export class EventService {
     }
 
 
+    async getEventsByOrganizer(organizerId) {
+        return this.repository.findByOrganizer(organizerId);
+    }
+
     async finishExpiredEvents() {
         const filters = {
             date: { $lt: new Date() },

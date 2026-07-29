@@ -1,10 +1,11 @@
 import passport from 'passport';
 import { Strategy as LocalStrategy } from 'passport-local';
 import { userRepository } from '../repositories/user.repository.js';
-import { createHash, isValidPassword } from '../utils/hash.js';
+import { isValidPassword } from '../utils/hash.js';
 import { RegisterDTO } from "../DTOs/user.dto.js";
 import { env } from '../config/env.js';
 import { Strategy as JwtStrategy } from 'passport-jwt';
+import { sessionService } from '../services/session.service.js';
 
 
 passport.use("register", new LocalStrategy(
@@ -12,24 +13,12 @@ passport.use("register", new LocalStrategy(
     async (req, email, password, done) => {
         try {
             const dto = new RegisterDTO(req.body);
-
-            const existingUser = await userRepository.findByEmail(email);
-            if (existingUser) {
-                return done(null, false, { message: "el usuario ya existe" });
-            }
-
-            const hashedPassword = await createHash(dto.password);
-
-            const newUser = await userRepository.create({
-                first_name: dto.first_name,
-                last_name: dto.last_name,
-                email: dto.email,
-                password: hashedPassword,
-                role: "user"
-            });
-
+            const newUser = await sessionService.register(dto);
             return done(null, newUser);
         } catch (error) {
+            if (error.statusCode === 409) {
+                return done(null, false, { message: error.message });
+            }
             return done(error);
         }
     }

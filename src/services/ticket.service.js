@@ -1,7 +1,7 @@
 import { ticketRepository, TicketRepository } from "../repositories/ticket.repository.js";
 import { eventService } from "../services/event.service.js"
-import { userRepository} from "../repositories/user.repository.js"
-import { validExistTicket, validStatusTicket, generateTicketCode, validTicket, validTicketCancellable, validTicketOwnership } from "../utils/ticket.utils.js";
+import { userRepository } from "../repositories/user.repository.js"
+import { validExistTicket, validStatusTicket, generateTicketCode, validTicket, validTicketCancellable, validTicketOwnership, validQuantity, validAvailableCapacity } from "../utils/ticket.utils.js";
 import { handleMongooseError } from "../utils/mongooseError.utils.js";
 import { validOwnership } from "../utils/event.utils.js";
 import { sendTicketConfirmationEmail } from "./mail.service.js";
@@ -20,56 +20,63 @@ export class TicketService {
 
         while (exists) {
             code = generateTicketCode();
-            exists = await this.ticketRepository.findOne({ code });
+            exists = await this.ticketRepository.findOne({ reservationCode: code });
         }
 
         return code;
     }
 
 
-async createTicket(userId, eventId) {
-    const event = await this.eventService.getEventById(eventId);
-    validStatusTicket(event.status);
+    async createTicket(userId, eventId, quantity) {
+        validQuantity(quantity);
 
-    const existingTicket = await this.ticketRepository.findOne({
-        user: userId,
-        event: eventId,
-        status: "active"
-    });
-    validExistTicket(existingTicket);
+        const event = await this.eventService.getEventById(eventId);
+        validStatusTicket(event.status);
 
-    let newTicket;
-    const code = await this.generateUniqueCode();
-    try {
-        newTicket = await this.ticketRepository.create({
+        const existingTicket = await this.ticketRepository.findOne({
             user: userId,
             event: eventId,
-            code
+            status: "active"
         });
+        validExistTicket(existingTicket);
+
+        const activeTickets = await this.ticketRepository.find({ event: eventId, status: "active" });
+        const occupiedSpots = activeTickets.reduce((total, ticket) => total + ticket.quantity, 0);
+        validAvailableCapacity(event.capacity, occupiedSpots, quantity);
+
+        let newTicket;
+        const code = await this.generateUniqueCode();
+        try {
+            newTicket = await this.ticketRepository.create({
+                user: userId,
+                event: eventId,
+                quantity,
+                reservationCode: code
+            });
+        }
+        catch (error) {
+            handleMongooseError(error);
+        }
+
+        const user = await this.userRepository.findById(userId);
+        const userName = `${user.first_name} ${user.last_name}`;
+
+        try {
+            await sendTicketConfirmationEmail({
+                to: user.email,
+                userName,
+                eventTitle: event.title,
+                ticketCode: newTicket.reservationCode
+            });
+        } catch (error) {
+            console.error("Error al enviar el mail de confirmación:", error.message);
+        }
+
+        return newTicket;
     }
-    catch (error) {
-        handleMongooseError(error);
-    }
-
-    const user = await this.userRepository.findById(userId);
-    const userName = `${user.first_name} ${user.last_name}`;
-
-    try {
-        await sendTicketConfirmationEmail({
-            to: user.email,
-            userName,
-            eventTitle: event.title,
-            ticketCode: newTicket.code
-        });
-    } catch (error) {
-        console.error("Error al enviar el mail de confirmación:", error.message);
-    }
-
-    return newTicket;
-}
 
 
-    async getTicketById(id) {
+    async getTicketById(id, userId, userRole) {
         let ticket;
         try {
             ticket = await this.ticketRepository.findById(id);
@@ -77,6 +84,20 @@ async createTicket(userId, eventId) {
             handleMongooseError(error);
         }
         validTicket(ticket);
+
+        const isOwner = ticket.user.toString() === userId;
+        const isAdmin = userRole === "admin";
+
+        if (!isOwner && !isAdmin) {
+            if (userRole !== "organizer") {
+                const error = new Error("no tenes permiso para ver este ticket");
+                error.statusCode = 403;
+                throw error;
+            }
+            const event = await this.eventService.getEventById(ticket.event._id);
+            validOwnership(event, userId, userRole);
+        }
+
         return ticket;
     }
 
@@ -89,9 +110,17 @@ async createTicket(userId, eventId) {
         }
     }
 
-    async getAllTickets(tickets) {
+    async getAllTickets(filters, userId, userRole) {
+        let queryFilters = filters;
+
+        if (userRole === "organizer") {
+            const organizerEvents = await this.eventService.getEventsByOrganizer(userId);
+            const eventIds = organizerEvents.map(event => event._id);
+            queryFilters = { ...filters, event: { $in: eventIds } };
+        }
+
         try {
-            return await this.ticketRepository.find(tickets);
+            return await this.ticketRepository.find(queryFilters);
         }
         catch (error) {
             handleMongooseError(error);
@@ -119,6 +148,12 @@ async createTicket(userId, eventId) {
         } catch (error) {
             handleMongooseError(error);
         }
+    }
+
+    async getTicketsByEvent(eventId, userId, userRole) {
+        const event = await this.eventService.getEventById(eventId);
+        validOwnership(event, userId, userRole);
+        return this.ticketRepository.find({ event: eventId });
     }
 }
 

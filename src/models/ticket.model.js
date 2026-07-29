@@ -22,7 +22,7 @@ const ticketSchema = new Schema({
         default: 1,
         min: 1
     },
-    code: {
+    reservationCode: {
         type: String,
         unique: true
     },

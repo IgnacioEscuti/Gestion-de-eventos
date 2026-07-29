@@ -24,6 +24,10 @@ export class EventRepository {
         return this.dao.count(filters);
     }
 
+    async findByOrganizer(organizerId) {
+        return this.dao.findByOrganizer(organizerId);
+    }
+
     async findByIdAndUpdate(id, data) {
         return this.dao.findByIdAndUpdate(id, data, { new: true });
     }

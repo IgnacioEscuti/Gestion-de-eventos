@@ -19,6 +19,10 @@ export class EventDAO {
     return eventModel.countDocuments(filters);
 }
 
+    async findByOrganizer(organizerId) {
+        return eventModel.find({ organizer: organizerId });
+    }
+
     async findByIdAndUpdate(id, data) {
         return eventModel.findByIdAndUpdate(id, data, { new: true });
     }

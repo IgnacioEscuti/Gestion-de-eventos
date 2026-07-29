@@ -19,6 +19,10 @@ export class UserRepository {
     async find(filters) {
         return this.dao.find(filters)
     }
+
+    async findById(id) {
+        return this.dao.findById(id);
+    }
 }
 
 export const userRepository = new UserRepository(userDAO);

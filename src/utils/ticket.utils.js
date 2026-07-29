@@ -6,7 +6,7 @@ export function validTicket(ticket) {
     }
 }
 
-export function validTicketOwnership(userId, userRole) {
+export function validTicketOwnership(ticket, userId, userRole) {
     const isOwner = ticket.user.toString() === userId;
     const isAdmin = userRole === "admin" || userRole === "organizer";
     if (!isOwner && !isAdmin) {

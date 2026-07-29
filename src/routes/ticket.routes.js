@@ -7,9 +7,9 @@ import { authorizeRoles } from "../middlewares/authorize.middleware.js";
 const router = Router();
 
 router.post("/", authenticateCurrent, createTicket);
+router.get("/all", authenticateCurrent, authorizeRoles(["admin", "organizer"]), getAllTickets);
 router.get("/:id", authenticateCurrent, getTicket);
 router.get("/", authenticateCurrent, getUserTickets);
-router.get("/all", authenticateCurrent, authorizeRoles(["admin", "organizer"]), getAllTickets);
 router.patch("/:id", authenticateCurrent, cancelTicket);
 
 

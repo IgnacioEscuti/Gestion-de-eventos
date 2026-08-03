@@ -72,7 +72,7 @@ src/
   config/        # Configuración de entorno, conexión a la base de datos, mail y cron
   controllers/   # Lógica de manejo de las peticiones HTTP
   DAOs/          # Acceso a datos (Data Access Objects)
-  DTOs/          # Objetos que sanitizan/dan forma a los datos de entrada
+  DTOs/          # Dan forma a los datos que entran (body) y a los que salen (respuestas) de la API
   middlewares/   # Middlewares de Express
   models/        # Esquemas de Mongoose
   repositories/  # Capa de abstracción entre servicios y DAO
@@ -82,6 +82,44 @@ src/
   app.js         # Configuración de la aplicación Express
   server.js      # Punto de entrada, levanta el servidor
 ```
+
+## Arquitectura en capas
+
+Cada request atraviesa siempre la misma cadena de responsabilidades, en este orden:
+
+```
+Route → Middleware (auth/roles) → Controller → Service → Repository → DAO → Modelo (Mongoose)
+                                        ↓
+                                      DTO (da forma a la respuesta)
+```
+
+| Capa | Responsabilidad | Puede importar | No puede hacer |
+|---|---|---|---|
+| **Route** | Define método + path, y qué middlewares/controller le corresponden | Middlewares, controllers | Lógica de negocio |
+| **Middleware** | Autenticación (`authenticateCurrent`) y autorización por rol (`authorizeRoles`) | — | Acceso a datos |
+| **Controller** | Extrae datos de `req`, llama al service correspondiente, arma la respuesta HTTP con el DTO | Services, DTOs | Importar modelos de Mongoose, calcular cupos/estados, decidir permisos sobre recursos propios |
+| **Service** | Concentra toda la lógica de negocio: validaciones, cupos, duplicados, permisos sobre recursos propios, envío de email | Repositories, utils de validación, otros services | Importar DAOs o modelos directamente |
+| **Repository** | Capa intermedia entre el service y el DAO. Expone métodos con nombre de dominio (`findByEmail`, `findByOrganizer`, `countActiveTickets`, `cancelTicket`) que internamente usan el DAO | El DAO correspondiente | Importar modelos de Mongoose directamente |
+| **DAO** | Único lugar que importa el modelo de Mongoose. Expone operaciones genéricas de acceso a datos (`find`, `findById`, `create`, `findByIdAndUpdate`) | El modelo de Mongoose | Contener reglas de negocio |
+| **DTO** | Define explícitamente qué campos salen en la respuesta (o entran en el body). Es la única fuente de verdad de la forma pública de un recurso — si el modelo cambia, el DTO no expone nada nuevo salvo que se lo agregue a mano | — | — |
+
+### Por qué está separado así
+
+- **DAO ↔ Repository:** el DAO es "cómo se consulta Mongo"; el Repository es "qué pregunta de negocio se está respondiendo". Por eso el DAO tiene métodos genéricos (`find`, `findOne`) y el Repository los combina en métodos con nombre de dominio (por ejemplo, `TicketRepository.countActiveTickets(eventId)` internamente hace un `find` + `reduce`, pero el service que lo llama no necesita saber eso).
+- **Service ↔ Controller:** el controller nunca decide si hay cupo, si un evento está publicado, o si el usuario tiene permiso sobre un recurso — todo eso vive en el service. Esto permite, por ejemplo, testear las reglas de negocio sin necesidad de levantar Express.
+- **DTO:** existe un DTO de salida por entidad (`UserDTO`, `EventDTO`, `TicketDTO`) además del `RegisterDTO` de entrada. Ningún controller devuelve un documento de Mongoose crudo — siempre pasa por su DTO antes de salir en la respuesta. Esto es lo que garantiza, por ejemplo, que el password nunca se filtre en ninguna respuesta aunque el modelo de usuario cambie a futuro: el `UserDTO` simplemente no tiene ese campo. Cuando una entidad incluye datos de otra vía `populate` (el `event` dentro de un `TicketDTO`), el DTO anida el DTO de esa otra entidad en vez de reenviar el sub-documento tal cual, para que también quede filtrado.
+
+### Manejo de errores centralizado
+
+Ningún controller arma la respuesta de error a mano. Los services validan reglas de negocio lanzando un `Error` con una propiedad `statusCode` (400, 401, 403, 404 o 409 según corresponda); los controllers atrapan ese error solo para reenviarlo con `next(error)`, y un único middleware (`src/middlewares/error.middlewares.js`, registrado al final de `app.js`) es el que arma la respuesta HTTP:
+
+```js
+export function errorHandler(err, req, res, next) {
+    res.status(err.statusCode || 500).json({ error: err.message });
+}
+```
+
+Si un error no trae `statusCode` (por ejemplo, una excepción inesperada no controlada), cae en **500** por default — así ningún error interno se escapa como un `200` o deja la respuesta sin enviar.
 
 ## Autenticación con Passport.js
 
@@ -106,6 +144,23 @@ El JWT en sí (generación de token y seteo de la cookie `httpOnly`) lo maneja e
 | `admin` | Acceso total: puede modificar cualquier evento y ver la lista de usuarios. |
 
 Todo registro público (`POST /api/sessions/register`) crea el usuario con `role: "user"`, sin importar lo que se envíe en el body — no se puede auto-asignar `organizer` ni `admin` desde afuera.
+
+### Usuarios de prueba — cómo conseguir un `organizer` o un `admin`
+
+Como el registro público siempre fuerza `role: "user"`, no hay ningún endpoint para crear un `organizer` o un `admin` directamente. Para probar esos roles en desarrollo:
+
+1. Registrate normalmente con `POST /api/sessions/register` (queda como `user`).
+2. Conectate a la base con `mongosh` (o Compass) usando el mismo `MONGO_URL` del `.env`, y actualizá el rol a mano:
+
+```js
+use <nombre_de_tu_base>
+db.users.updateOne(
+  { email: "ana@example.com" },
+  { $set: { role: "organizer" } } // o "admin"
+)
+```
+
+3. Volvé a hacer login (`POST /api/sessions/login`) para que el JWT se genere con el rol nuevo — el token viejo sigue teniendo el rol anterior hasta que expira.
 
 ### Matriz de permisos
 
@@ -547,8 +602,8 @@ curl -X POST http://localhost:3000/api/events/<eventId>/tickets \
 |---|---|---|
 | 400 | `quantity` inválida (no entero, o <= 0) | `{"error": "la cantidad debe ser un número entero mayor a 0"}` |
 | 400 | El evento no está publicado (`draft`, `cancelled` o `finished`) | `{"error": "El ticket no pertenece a un evento publicado"}` |
-| 400 | Ya existe un ticket activo del usuario para ese evento | `{"error": "ya existe un ticket activo para este evento"}` |
-| 400 | No hay cupo suficiente para la cantidad pedida | `{"error": "no hay cupos disponibles para la cantidad solicitada"}` |
+| 409 | Ya existe un ticket activo del usuario para ese evento | `{"error": "ya existe un ticket activo para este evento"}` |
+| 409 | No hay cupo suficiente para la cantidad pedida | `{"error": "no hay cupos disponibles para la cantidad solicitada"}` |
 | 401 | No hay cookie de sesión, o el token es inválido/expiró | `{"error": "no autenticado"}` |
 | 404 | El evento no existe | `{"error": "no existe el evento"}` |
 

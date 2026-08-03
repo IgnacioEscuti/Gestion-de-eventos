@@ -1,6 +1,7 @@
 import { userRepository } from "../repositories/user.repository.js";
 import { createHash, isValidPassword } from "../utils/hash.js";
 import { generateToken } from "../utils/jwt.js"
+import { UserDTO } from "../DTOs/user.dto.js";
 
 
 
@@ -28,29 +29,25 @@ export class SessionService {
             role: "user"
         });
 
-        return {
-            id: newUser._id,
-            first_name: newUser.first_name,
-            last_name: newUser.last_name,
-            email: newUser.email,
-            role: newUser.role
-        };
+        return new UserDTO(newUser);
     }
 
 //login
 
     async generateSessionToken(user) {
+        const userDTO = new UserDTO(user);
+
         const tokenUser = {
-            id: user.id,
-            email: user.email,
-            role: user.role
+            id: userDTO.id,
+            email: userDTO.email,
+            role: userDTO.role
         }
 
         const token = generateToken(tokenUser)
 
         const sessionData = {
-            email: user.email,
-            role: user.role,
+            email: userDTO.email,
+            role: userDTO.role,
             token: token
         }
         return sessionData;

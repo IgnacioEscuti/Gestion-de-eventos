@@ -1,43 +1,44 @@
 import { ticketService } from "../services/ticket.service.js"
+import { TicketDTO } from "../DTOs/ticket.dto.js"
 
 
 export async function createTicket(req, res, next) {
     try {
         const newTicket = await ticketService.createTicket(req.user.id, req.params.eventId, req.body.quantity);
-        res.status(201).json({ ticket: newTicket });
+        res.status(201).json({ ticket: new TicketDTO(newTicket) });
     }
     catch (error) {
-        res.status(error.statusCode || 500).json({ error: error.message });
+        next(error);
     }
 }
 
 export async function getTicket(req, res, next) {
     try {
         const ticket = await ticketService.getTicketById(req.params.id, req.user.id, req.user.role);
-        res.status(200).json({ ticket });
+        res.status(200).json({ ticket: new TicketDTO(ticket) });
     }
     catch (error) {
-        res.status(error.statusCode || 500).json({ error: error.message });
+        next(error);
     }
 }
 
 export async function getUserTickets(req, res, next) {
     try {
         const tickets = await ticketService.getUserTickets(req.user.id);
-        res.status(200).json({ tickets })
+        res.status(200).json({ tickets: tickets.map(ticket => new TicketDTO(ticket)) })
     }
     catch (error) {
-        res.status(error.statusCode || 500).json({ error: error.message });
+        next(error);
     }
 }
 
 export async function getAllTickets(req, res, next) {
     try {
         const tickets = await ticketService.getAllTickets(req.query, req.user.id, req.user.role);
-        res.status(200).json({ tickets })
+        res.status(200).json({ tickets: tickets.map(ticket => new TicketDTO(ticket)) })
     }
     catch (error) {
-        res.status(error.statusCode || 500).json({ error: error.message });
+        next(error);
     }
 }
 
@@ -45,19 +46,19 @@ export async function getAllTickets(req, res, next) {
 export async function cancelTicket(req, res, next) {
     try {
         const ticket = await ticketService.cancelTicket(req.params.id, req.user.id, req.user.role);
-        res.status(200).json({ ticket })
+        res.status(200).json({ ticket: new TicketDTO(ticket) })
     }
     catch (error) {
-        res.status(error.statusCode || 500).json({ error: error.message });
+        next(error);
     }
 }
 
-export async function getTicketsByEvent(req, res) {
+export async function getTicketsByEvent(req, res, next) {
     try {
         const tickets = await ticketService.getTicketsByEvent(req.params.eventId, req.user.id, req.user.role);
-        res.status(200).json({ tickets });
+        res.status(200).json({ tickets: tickets.map(ticket => new TicketDTO(ticket)) });
     } catch (error) {
-        res.status(error.statusCode || 500).json({ error: error.message });
+        next(error);
     }
 }
 

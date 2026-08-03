@@ -7,6 +7,7 @@ import cookieParser from "cookie-parser"
 import passport from "passport"
 import "./config/passport.config.js"
 import "./config/cron.config.js"
+import { errorHandler } from "./middlewares/error.middlewares.js"
 
 const app = express();
 
@@ -25,6 +26,8 @@ app.use("/api/users", userRouter);
 app.use("/api/tickets", ticketRouter);
 app.use("/api/events", eventRouter);
 app.use("/api/sessions", sessionRouter);
+
+app.use(errorHandler);
 
 export default app;
 

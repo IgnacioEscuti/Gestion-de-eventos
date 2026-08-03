@@ -19,7 +19,7 @@ export function validTicketOwnership(ticket, userId, userRole) {
 export function validExistTicket(existingTicket) {
     if (existingTicket) {
         const error = new Error("ya existe un ticket activo para este evento");
-        error.statusCode = 400;
+        error.statusCode = 409;
         throw error;
     }
 }
@@ -49,7 +49,7 @@ export function validTicketCancellable(ticket) {
 export function validAvailableCapacity(capacity, occupiedSpots, quantity) {
     if (capacity - occupiedSpots < quantity) {
         const error = new Error("no hay cupos disponibles para la cantidad solicitada");
-        error.statusCode = 400;
+        error.statusCode = 409;
         throw error;
     }
 }

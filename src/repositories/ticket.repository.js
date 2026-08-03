@@ -26,6 +26,26 @@ export class TicketRepository {
     async findByIdAndUpdate(id, data) {
         return this.dao.findByIdAndUpdate(id, data, { new: true });
     }
+
+    async findActiveTicket(userId, eventId) {
+        return this.dao.findOne({ user: userId, event: eventId, status: "active" });
+    }
+
+    async countActiveTickets(eventId) {
+        const activeTickets = await this.dao.find({ event: eventId, status: "active" });
+        return activeTickets.reduce((total, ticket) => total + ticket.quantity, 0);
+    }
+
+    async cancelTicket(ticketId) {
+        return this.dao.findByIdAndUpdate(ticketId, {
+            status: "cancelled",
+            cancelledAt: new Date()
+        }, { new: true });
+    }
+
+    async findByEvent(eventId) {
+        return this.dao.find({ event: eventId });
+    }
 }
 
 export const ticketRepository = new TicketRepository(ticketDAO);

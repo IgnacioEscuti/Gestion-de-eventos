@@ -1,10 +1,11 @@
 import { sessionService } from "../services/session.service.js";
 import { env } from "../config/env.js"
+import { UserDTO } from "../DTOs/user.dto.js";
 
 
 
 export async function register(req, res) {
-    const { first_name, last_name, email, role } = req.user;
+    const { first_name, last_name, email, role } = new UserDTO(req.user);
     res.status(201).json({ newUser: { first_name, last_name, email, role } });
 }
 
@@ -22,13 +23,13 @@ export async function login(req, res, next) {
         res.status(200).json({ email, role });
     }
     catch (error) {
-        res.status(error.statusCode || 500).json({ error: error.message })
+        next(error);
     }
 };
 
 
 export async function getCurrentUser(req, res, next) {
-    const { id, email, role } = req.user;
+    const { id, email, role } = new UserDTO(req.user);
     res.status(200).json({ id, email, role })
 }
 

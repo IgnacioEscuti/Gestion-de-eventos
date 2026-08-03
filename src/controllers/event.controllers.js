@@ -1,32 +1,36 @@
 import { eventService } from "../services/event.service.js";
+import { EventDTO } from "../DTOs/event.dto.js";
 
 
 
 export async function createEvent(req, res, next) {
     try {
         const newEvent = await eventService.createEvent(req.body, req.user.id)
-        res.status(201).json({ event: newEvent });
+        res.status(201).json({ event: new EventDTO(newEvent) });
     } catch (error) {
-        res.status(error.statusCode || 500).json({ error: error.message });
+        next(error);
     }
 }
 
 
-export async function getEvent(req, res) {
+export async function getEvent(req, res, next) {
     try {
         const getEvent = await eventService.getEventById(req.params.id);
-        res.status(200).json({ event: getEvent });
+        res.status(200).json({ event: new EventDTO(getEvent) });
     } catch (error) {
-        res.status(error.statusCode || 500).json({ error: error.message });
+        next(error);
     }
 }
 
 export async function getAllEvents(req, res, next) {
     try {
         const result = await eventService.getEvents(req.query);
-        res.status(200).json(result);
+        res.status(200).json({
+            ...result,
+            data: result.data.map(event => new EventDTO(event))
+        });
     } catch (error) {
-        res.status(error.statusCode || 500).json({ error: error.message });
+        next(error);
     }
 }
 
@@ -34,8 +38,8 @@ export async function getAllEvents(req, res, next) {
 export async function modifyEvent(req, res, next) {
     try {
         const updatedEvent = await eventService.modifyEvent(req.params.id, req.user.id, req.user.role, req.body)
-        res.status(200).json({ event: updatedEvent });
+        res.status(200).json({ event: new EventDTO(updatedEvent) });
     } catch (error) {
-        res.status(error.statusCode || 500).json({ error: error.message });
+        next(error);
     }
 }

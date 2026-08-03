@@ -1,4 +1,4 @@
-import { ticketRepository, TicketRepository } from "../repositories/ticket.repository.js";
+import { ticketRepository } from "../repositories/ticket.repository.js";
 import { eventService } from "../services/event.service.js"
 import { userRepository } from "../repositories/user.repository.js"
 import { validExistTicket, validStatusTicket, generateTicketCode, validTicket, validTicketCancellable, validTicketOwnership, validQuantity, validAvailableCapacity } from "../utils/ticket.utils.js";
@@ -33,15 +33,10 @@ export class TicketService {
         const event = await this.eventService.getEventById(eventId);
         validStatusTicket(event.status);
 
-        const existingTicket = await this.ticketRepository.findOne({
-            user: userId,
-            event: eventId,
-            status: "active"
-        });
+        const existingTicket = await this.ticketRepository.findActiveTicket(userId, eventId);
         validExistTicket(existingTicket);
 
-        const activeTickets = await this.ticketRepository.find({ event: eventId, status: "active" });
-        const occupiedSpots = activeTickets.reduce((total, ticket) => total + ticket.quantity, 0);
+        const occupiedSpots = await this.ticketRepository.countActiveTickets(eventId);
         validAvailableCapacity(event.capacity, occupiedSpots, quantity);
 
         let newTicket;
@@ -140,11 +135,7 @@ export class TicketService {
         validTicketCancellable(ticket);
 
         try {
-            return await this.ticketRepository.findByIdAndUpdate(ticketId, {
-                status: "cancelled",
-                cancelledAt: new Date()
-
-            });
+            return await this.ticketRepository.cancelTicket(ticketId);
         } catch (error) {
             handleMongooseError(error);
         }
@@ -153,9 +144,10 @@ export class TicketService {
     async getTicketsByEvent(eventId, userId, userRole) {
         const event = await this.eventService.getEventById(eventId);
         validOwnership(event, userId, userRole);
-        return this.ticketRepository.find({ event: eventId });
+        return this.ticketRepository.findByEvent(eventId);
     }
 }
 
 
 export const ticketService = new TicketService(ticketRepository, eventService, userRepository);
+

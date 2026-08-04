@@ -43,3 +43,13 @@ export async function modifyEvent(req, res, next) {
         next(error);
     }
 }
+
+
+export async function changeEventStatus(req, res, next) {
+    try {
+        const updatedEvent = await eventService.changeEventStatus(req.params.id, req.user.id, req.user.role, req.body.status)
+        res.status(200).json({ event: new EventDTO(updatedEvent) });
+    } catch (error) {
+        next(error);
+    }
+}

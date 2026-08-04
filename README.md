@@ -402,7 +402,7 @@ curl -X POST http://localhost:3000/api/events \
   }'
 ```
 
-### Respuesta exitosa (200)
+### Respuesta exitosa (201)
 
 ```json
 { "event": { "_id": "...", "title": "Congreso Tech 2026", "status": "draft", "organizer": "...", "...": "..." } }

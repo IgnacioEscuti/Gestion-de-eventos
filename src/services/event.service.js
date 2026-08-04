@@ -1,5 +1,5 @@
 import { eventRepository } from "../repositories/event.repository.js";
-import { validDate, validCapacity, validPrice, validEvent, validOwnership, validEventEditable } from "../utils/event.utils.js";
+import { validDate, validCapacity, validPrice, validEvent, validOwnership, validEventEditable, validStatusValue, validStatusTransition } from "../utils/event.utils.js";
 import { handleMongooseError } from "../utils/mongooseError.utils.js";
 
 export class EventService {
@@ -108,6 +108,26 @@ export class EventService {
         }
     }
 
+
+    async changeEventStatus(eventId, userId, userRole, status) {
+        let getEvent;
+        try {
+            getEvent = await this.repository.findById(eventId);
+        } catch (error) {
+            handleMongooseError(error);
+        }
+
+        validEvent(getEvent);
+        validOwnership(getEvent, userId, userRole);
+        validStatusValue(status);
+        validStatusTransition(getEvent, status);
+
+        try {
+            return await this.repository.findByIdAndUpdate(eventId, { status });
+        } catch (error) {
+            handleMongooseError(error);
+        }
+    }
 
     async getEventsByOrganizer(organizerId) {
         return this.repository.findByOrganizer(organizerId);

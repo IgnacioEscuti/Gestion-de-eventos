@@ -66,3 +66,26 @@ export function validEventEditable(event) {
     }
 }
 
+export function validStatusValue(status) {
+    const validStatuses = ["draft", "published", "cancelled", "finished"];
+    if (!validStatuses.includes(status)) {
+        const error = new Error("el estado del evento no es válido");
+        error.statusCode = 400;
+        throw error;
+    }
+}
+
+export function validStatusTransition(event, newStatus) {
+    if (event.status === "cancelled") {
+        const error = new Error("no se puede cambiar el estado de un evento cancelado");
+        error.statusCode = 400;
+        throw error;
+    }
+
+    if (newStatus === "published" && (event.status === "finished" || event.date <= new Date())) {
+        const error = new Error("no se puede publicar un evento finalizado o vencido");
+        error.statusCode = 400;
+        throw error;
+    }
+}
+

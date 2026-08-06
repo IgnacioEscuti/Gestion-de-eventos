@@ -13,7 +13,7 @@ export class UserRepository {
     }
 
     async findByEmail(email) {
-        return this.dao.findByEmail(email)
+        return this.dao.findByEmail(email).select("+password")
     }
 
     async find(filters) {

@@ -16,8 +16,9 @@ export class EventRepository {
         return this.dao.findById(id);
     }
 
-    async find(filters, page, limit, sort) {
-        return this.dao.find(filters, page, limit, sort);
+    async find(filters, page = 1, limit = 10, sort = "date") {
+        const skip = (page - 1) * limit;
+        return this.dao.find(filters).sort(sort).skip(skip).limit(limit);
     }
 
     async count(filters) {

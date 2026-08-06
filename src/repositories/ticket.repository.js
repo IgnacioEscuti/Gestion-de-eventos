@@ -8,7 +8,8 @@ export class TicketRepository {
     }
 
     async create(data) {
-        return this.dao.create(data);
+        const ticket = await this.dao.create(data);
+        return ticket.populate("event", "title date location");
     }
 
     async findOne(data) {
@@ -16,15 +17,15 @@ export class TicketRepository {
     }
 
     async find(userId) {
-        return this.dao.find(userId);
+        return this.dao.find(userId).populate("event", "title date location");
     }
 
     async findById(id) {
-        return this.dao.findById(id);
+        return this.dao.findById(id).populate("event", "title date location");
     }
 
     async findByIdAndUpdate(id, data) {
-        return this.dao.findByIdAndUpdate(id, data, { new: true });
+        return this.dao.findByIdAndUpdate(id, data).populate("event", "title date location");
     }
 
     async findActiveTicket(userId, eventId) {
@@ -37,14 +38,14 @@ export class TicketRepository {
     }
 
     async cancelTicket(ticketId) {
-        return this.dao.findByIdAndUpdate(ticketId, {
+        return this.findByIdAndUpdate(ticketId, {
             status: "cancelled",
             cancelledAt: new Date()
-        }, { new: true });
+        });
     }
 
     async findByEvent(eventId) {
-        return this.dao.find({ event: eventId });
+        return this.find({ event: eventId });
     }
 }
 

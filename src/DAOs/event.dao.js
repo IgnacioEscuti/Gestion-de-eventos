@@ -10,9 +10,8 @@ export class EventDAO {
         return eventModel.findById(id);
     }
 
-    async find(filters, page = 1, limit = 10, sort = "date") {
-        const skip = (page - 1) * limit;
-        return eventModel.find(filters).sort(sort).skip(skip).limit(limit);
+    find(filters) {
+        return eventModel.find(filters);
     }
 
     async count(filters) {

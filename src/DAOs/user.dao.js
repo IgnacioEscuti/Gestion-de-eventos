@@ -6,8 +6,8 @@ export class UserDAO {
         return userModel.create(data);
     }
 
-    async findByEmail(email) {
-        return userModel.findOne({ email: email.trim().toLowerCase() }).select("+password");
+    findByEmail(email) {
+        return userModel.findOne({ email: email.trim().toLowerCase() });
     }
 
     async find(filters) {
